@@ -20,3 +20,23 @@ This MCP (Model Context Protocol) server allows LLMs like Claude to interact wit
 - Python 3.12 or higher
 - [Claude Desktop](https://claude.ai/download) for the best experience
 
+### Usage with Claude Desktop
+
+1. Update the Claude Desktop config:
+- MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Include reference to the MCP server
+  ```json
+  {
+  "mcpServers": {
+    "espn-fantasy-football": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/directory",
+        "run",
+        "espn_fantasy_server.py"
+        ]
+      }
+    } 
+  }
+2. Restart Claude Desktop
