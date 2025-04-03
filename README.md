@@ -6,7 +6,7 @@ This MCP (Model Context Protocol) server allows LLMs like Claude to interact wit
 
 ## Features (MCP Tools)
 
-- **Authentication**: Securely store ESPN credentials for the current session
+- **Authentication**: Securely store ESPN credentials for the current session (for private leagues)
 - **League Info**: Get basic information about fantasy football leagues
 - **Team Rosters**: View current team rosters and player details
 - **Player Stats**: Find and display stats for specific players
@@ -41,6 +41,6 @@ This MCP (Model Context Protocol) server allows LLMs like Claude to interact wit
   }
 2. Restart Claude Desktop
 
-## Acknoledgements
+## Acknowledgements
 
 [cwendt94/espn-api](https://github.com/cwendt94/espn-api) for the nifty python wrapper around the ESPN Fantasy API
