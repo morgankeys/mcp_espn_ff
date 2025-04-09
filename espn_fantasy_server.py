@@ -161,7 +161,8 @@ try:
                     "position": player.position,
                     "proTeam": player.proTeam,
                     "points": player.total_points,
-                    "projected_points": player.projected_total_points
+                    "projected_points": player.projected_total_points,
+                    "stats": player.stats
                 })
             
             return str(roster_info)
@@ -172,6 +173,52 @@ try:
                 return ("This appears to be a private league. Please use the authenticate tool first with your "
                       "ESPN_S2 and SWID cookies to access private leagues.")
             return f"Error retrieving team roster: {str(e)}"
+        
+    @mcp.tool()
+    async def get_team_info(league_id: int, team_id: int, year: int = CURRENT_YEAR) -> str:
+        """Get a team's general information. Including points scored, transactions, etc.
+        
+        Args:
+            league_id: The ESPN fantasy football league ID
+            team_id: The team ID in the league (usually 1-12)
+            year: Optional year for historical data (defaults to current season)
+        """
+        try:
+            log_error(f"Getting team roster for league {league_id}, team {team_id}, year {year}")
+            # Get league using stored credentials
+            league = api.get_league(SESSION_ID, league_id, year)
+
+            # Team IDs in ESPN API are 1-based
+            if team_id < 1 or team_id > len(league.teams):
+                return f"Invalid team_id. Must be between 1 and {len(league.teams)}"
+            
+            team = league.teams[team_id - 1]
+
+            team_info = {
+                "team_name": team.team_name,
+                "owner": team.owners,
+                "wins": team.wins,
+                "losses": team.losses,
+                "ties": team.ties,
+                "points_for": team.points_for,
+                "points_against": team.points_against,
+                "acquisitions": team.acquisitions,
+                "drops": team.drops,
+                "trades": team.trades,
+                "playoff_pct": team.playoff_pct,
+                "final_standing": team.final_standing,
+                "outcomes": team.outcomes
+            }
+            
+            return str(team_info)
+
+        except Exception as e:
+            log_error(f"Error retrieving team results: {str(e)}")
+            traceback.print_exc(file=sys.stderr)
+            if "401" in str(e) or "Private" in str(e):
+                return ("This appears to be a private league. Please use the authenticate tool first with your "
+                      "ESPN_S2 and SWID cookies to access private leagues.")
+            return f"Error retrieving team results: {str(e)}"
 
     @mcp.tool()
     async def get_player_stats(league_id: int, player_name: str, year: int = CURRENT_YEAR) -> str:
@@ -207,7 +254,8 @@ try:
                 "team": player.proTeam,
                 "points": player.total_points,
                 "projected_points": player.projected_total_points,
-                "stats": player.stats
+                "stats": player.stats,
+                "injured": player.injured
             }
             
             return str(stats)
