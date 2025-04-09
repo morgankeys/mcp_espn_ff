@@ -2,7 +2,7 @@
 
 ## Overview
 
-This MCP (Model Context Protocol) server allows LLMs like Claude to interact with the ESPN Fantasy Football API. It provides tools for accessing league data, team rosters, player statistics, and more through a standardized interface.
+This MCP (Model Context Protocol) server allows LLMs like Claude to interact with the ESPN Fantasy Football API. It provides tools for accessing league data, team rosters, player statistics, and more through a standardized interface. It can work with both public and private ESPN Leagues.
 
 ## Features (MCP Tools)
 
@@ -17,7 +17,8 @@ This MCP (Model Context Protocol) server allows LLMs like Claude to interact wit
 
 ### Prerequisites
 
-- Python 3.12 or higher
+- Python 3.10 or higher
+- `vu` package manager
 - [Claude Desktop](https://claude.ai/download) for the best experience
 
 ### Usage with Claude Desktop
@@ -41,6 +42,8 @@ This MCP (Model Context Protocol) server allows LLMs like Claude to interact wit
   }
 2. Restart Claude Desktop
 
+
 ## Acknowledgements
 
 [cwendt94/espn-api](https://github.com/cwendt94/espn-api) for the nifty python wrapper around the ESPN Fantasy API
+
