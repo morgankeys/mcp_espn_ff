@@ -67,7 +67,7 @@ def _classify_error(exc: Exception):
         return {
             "category": "auth",
             "status_code": code,
-            "suggestion": "Authenticate first using the authenticate tool with ESPN_S2 and SWID cookies.",
+            "suggestion": "Authentication has failed.",
         }
     if code == 404 or "not found" in text:
         return {
@@ -93,6 +93,8 @@ def _error_json(context: str, exc: Exception) -> str:
     if info.get("suggestion"):
         payload["suggestion"] = info["suggestion"]
     return _to_json(payload)
+
+ 
 
 async def _capture_cookies_via_browser(headless: bool = False, timeout_seconds: int = 300):
     try:
@@ -143,64 +145,22 @@ try:
     class ESPNFantasyFootballAPI:
         def __init__(self):
             self.leagues = {}  # Cache for league objects
-            # Store credentials separately per-session rather than globally
-            self.credentials = {}
-            # Track which league cache keys belong to each session for safe purging
-            self.session_to_league_keys = {}
         
-        def get_league(self, session_id, league_id, year=CURRENT_YEAR):
-            """Get a league instance with caching, using stored credentials if available"""
-            key = f"{session_id}:{league_id}:{year}"
-            
-            # Check if we have credentials for this session
-            espn_s2 = None
-            swid = None
-            if session_id in self.credentials:
-                espn_s2 = self.credentials[session_id].get('espn_s2')
-                swid = self.credentials[session_id].get('swid')
-            
-            # Cache is keyed by session and league/year only; no credentials included
-            cache_key = key
-            
-            if cache_key not in self.leagues:
-                logger.info(f"Creating new league instance for {league_id}, year {year}")
-                try:
-                    self.leagues[cache_key] = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
-                except Exception as e:
-                    logger.exception(f"Error creating league: {str(e)}")
-                    raise
-            # Index this cache key under the session for later purging
-            keys = self.session_to_league_keys.get(session_id)
-            if keys is None:
-                keys = set()
-                self.session_to_league_keys[session_id] = keys
-            keys.add(cache_key)
-            
-            return self.leagues[cache_key]
+        def get_league(self, league_id, year=CURRENT_YEAR, espn_s2: str | None = None, swid: str | None = None):
+            """Get a league instance."""
+
+            cache_key = f"{league_id}:{year}"
+
+            espn_s2_value = (espn_s2 or "").strip() or None
+            swid_value = (swid or "").strip() or None
+
+            try:
+                self.leagues[cache_key] = League(league_id=league_id, year=year, espn_s2=espn_s2_value, swid=swid_value)
+                return self.leagues[cache_key]
+            except Exception as e:
+                logger.exception(f"Error creating league: {str(e)}")
+                raise
         
-        def store_credentials(self, session_id, espn_s2, swid):
-            """Store credentials for a session"""
-            self.credentials[session_id] = {'espn_s2': espn_s2, 'swid': swid}
-            # Purge all cached leagues for this session so new creds take effect
-            keys = self.session_to_league_keys.pop(session_id, set())
-            if keys:
-                for k in list(keys):
-                    self.leagues.pop(k, None)
-                logger.info(f"Purged {len(keys)} cached league instance(s) for session {session_id}")
-            logger.info(f"Stored credentials for session {session_id}")
-        
-        def clear_credentials(self, session_id):
-            """Clear credentials for a session"""
-            if session_id in self.credentials:
-                del self.credentials[session_id]
-                logger.info(f"Cleared credentials for session {session_id}")
-            # Also purge any cached leagues created under this session
-            keys = self.session_to_league_keys.pop(session_id, set())
-            if keys:
-                for k in list(keys):
-                    if k in self.leagues:
-                        del self.leagues[k]
-                logger.info(f"Purged {len(keys)} cached league instance(s) for session {session_id}")
 
     # Create our API instance
     api = ESPNFantasyFootballAPI()
@@ -218,27 +178,25 @@ try:
             s2, sw = await _capture_cookies_via_browser(headless=False, timeout_seconds=timeout_seconds)
             if not s2 or not sw:
                 return "Authentication failed: cookies not detected. Please complete login in the opened browser window."
-            api.store_credentials(sid, s2, sw)
             return f"Authentication successful.\n\nESPN_S2: {s2}\nSWID: {sw}\n\nState these values to the user explicitly so you can reuse them."
         except Exception as e:
             logger.exception(f"Authentication error: {str(e)}")
-            return _error_json("authenticate", e)
-
-    
+            return _error_json("authenticate", e)    
 
     @mcp.tool("get_league_info")
-    async def get_league_info(league_id: int, year: int = CURRENT_YEAR, session_id: str = "") -> str:
+    async def get_league_info(league_id: int, year: int = CURRENT_YEAR, espn_s2: str = "", swid: str = "") -> str:
         """Get basic information about a fantasy football league.
         
         Args:
             league_id: The ESPN fantasy football league ID
-            year: Optional year for historical data (defaults to current season)
-            session_id: Optional session identifier for per-user credentials
+            year: Year for historical data (defaults to current season)
+            espn_s2: ESPN_S2 cookie to use for this call
+            swid: SWID cookie to use for this call
         """
         try:
             logger.info(f"Getting league info for league {league_id}, year {year}")
-            # Get league using stored credentials
-            league = api.get_league(_resolve_session_id(session_id), league_id, year)
+            # Get league using stored credentials or per-call overrides
+            league = api.get_league(league_id, year, espn_s2=(espn_s2 or None), swid=(swid or None))
             
             info = {
                 "name": league.settings.name,
@@ -256,19 +214,20 @@ try:
             return _error_json("get_league_info", e)
 
     @mcp.tool("get_team_roster")
-    async def get_team_roster(league_id: int, team_id: int, year: int = CURRENT_YEAR, session_id: str = "") -> str:
+    async def get_team_roster(league_id: int, team_id: int, year: int = CURRENT_YEAR, espn_s2: str = "", swid: str = "") -> str:
         """Get a team's current roster.
         
         Args:
             league_id: The ESPN fantasy football league ID
             team_id: The team ID in the league (usually 1-12)
             year: Optional year for historical data (defaults to current season)
-            session_id: Optional session identifier for per-user credentials
+            espn_s2: Optional ESPN_S2 cookie to use for this call
+            swid: Optional SWID cookie to use for this call
         """
         try:
             logger.info(f"Getting team roster for league {league_id}, team {team_id}, year {year}")
-            # Get league using stored credentials
-            league = api.get_league(_resolve_session_id(session_id), league_id, year)
+            # Get league using stored credentials or per-call overrides
+            league = api.get_league(league_id, year, espn_s2=(espn_s2 or None), swid=(swid or None))
             
             # Team IDs in ESPN API are 1-based
             if team_id < 1 or team_id > len(league.teams):
@@ -300,19 +259,20 @@ try:
             return _error_json("get_team_roster", e)
         
     @mcp.tool("get_team_info")
-    async def get_team_info(league_id: int, team_id: int, year: int = CURRENT_YEAR, session_id: str = "") -> str:
+    async def get_team_info(league_id: int, team_id: int, year: int = CURRENT_YEAR, espn_s2: str = "", swid: str = "") -> str:
         """Get a team's general information. Including points scored, transactions, etc.
         
         Args:
             league_id: The ESPN fantasy football league ID
             team_id: The team ID in the league (usually 1-12)
             year: Optional year for historical data (defaults to current season)
-            session_id: Optional session identifier for per-user credentials
+            espn_s2: Optional ESPN_S2 cookie to use for this call
+            swid: Optional SWID cookie to use for this call
         """
         try:
             logger.info(f"Getting team roster for league {league_id}, team {team_id}, year {year}")
-            # Get league using stored credentials
-            league = api.get_league(_resolve_session_id(session_id), league_id, year)
+            # Get league using stored credentials or per-call overrides
+            league = api.get_league(league_id, year, espn_s2=(espn_s2 or None), swid=(swid or None))
 
             # Team IDs in ESPN API are 1-based
             if team_id < 1 or team_id > len(league.teams):
@@ -343,19 +303,20 @@ try:
             return _error_json("get_team_info", e)
 
     @mcp.tool("get_player_stats")
-    async def get_player_stats(league_id: int, player_name: str, year: int = CURRENT_YEAR, session_id: str = "") -> str:
+    async def get_player_stats(league_id: int, player_name: str, year: int = CURRENT_YEAR, espn_s2: str = "", swid: str = "") -> str:
         """Get stats for a specific player.
         
         Args:
             league_id: The ESPN fantasy football league ID
             player_name: Name of the player to search for
             year: Optional year for historical data (defaults to current season)
-            session_id: Optional session identifier for per-user credentials
+            espn_s2: Optional ESPN_S2 cookie to use for this call
+            swid: Optional SWID cookie to use for this call
         """
         try:
             logger.info(f"Getting player stats for {player_name} in league {league_id}, year {year}")
-            # Get league using stored credentials
-            league = api.get_league(_resolve_session_id(session_id), league_id, year)
+            # Get league using stored credentials or per-call overrides
+            league = api.get_league(league_id, year, espn_s2=(espn_s2 or None), swid=(swid or None))
             
             # Search for player by name
             player = None
@@ -387,18 +348,19 @@ try:
             return _error_json("get_player_stats", e)
 
     @mcp.tool("get_league_standings")
-    async def get_league_standings(league_id: int, year: int = CURRENT_YEAR, session_id: str = "") -> str:
+    async def get_league_standings(league_id: int, year: int = CURRENT_YEAR, espn_s2: str = "", swid: str = "") -> str:
         """Get current standings for a league.
         
         Args:
             league_id: The ESPN fantasy football league ID
             year: Optional year for historical data (defaults to current season)
-            session_id: Optional session identifier for per-user credentials
+            espn_s2: Optional ESPN_S2 cookie to use for this call
+            swid: Optional SWID cookie to use for this call
         """
         try:
             logger.info(f"Getting league standings for league {league_id}, year {year}")
-            # Get league using stored credentials
-            league = api.get_league(_resolve_session_id(session_id), league_id, year)
+            # Get league using stored credentials or per-call overrides
+            league = api.get_league(league_id, year, espn_s2=(espn_s2 or None), swid=(swid or None))
             
             # Sort teams by wins (descending), then points (descending)
             sorted_teams = sorted(league.teams, 
@@ -423,19 +385,20 @@ try:
             return _error_json("get_league_standings", e)
 
     @mcp.tool("get_matchup_info")
-    async def get_matchup_info(league_id: int, week: int = None, year: int = CURRENT_YEAR, session_id: str = "") -> str:
+    async def get_matchup_info(league_id: int, week: int = None, year: int = CURRENT_YEAR, espn_s2: str = "", swid: str = "") -> str:
         """Get matchup information for a specific week.
         
         Args:
             league_id: The ESPN fantasy football league ID
             week: The week number (if None, uses current week)
             year: Optional year for historical data (defaults to current season)
-            session_id: Optional session identifier for per-user credentials
+            espn_s2: Optional ESPN_S2 cookie to use for this call
+            swid: Optional SWID cookie to use for this call
         """
         try:
             logger.info(f"Getting matchup info for league {league_id}, week {week}, year {year}")
-            # Get league using stored credentials
-            league = api.get_league(_resolve_session_id(session_id), league_id, year)
+            # Get league using stored credentials or per-call overrides
+            league = api.get_league(league_id, year, espn_s2=(espn_s2 or None), swid=(swid or None))
             
             if week is None:
                 week = league.current_week
@@ -460,24 +423,6 @@ try:
             logger.exception(f"Error retrieving matchup information: {str(e)}")
             return _error_json("get_matchup_info", e)
 
-    
-
-    @mcp.tool("logout")
-    async def logout(session_id: str = "") -> str:
-        """Clear stored authentication credentials for this session.
-
-        Args:
-            session_id: Optional session identifier whose credentials and caches will be cleared
-        """
-        try:
-            logger.info("Logging out...")
-            # Clear credentials for this session
-            api.clear_credentials(_resolve_session_id(session_id))
-            
-            return "Authentication credentials have been cleared."
-        except Exception as e:
-            logger.exception(f"Error logging out: {str(e)}")
-            return _error_json("logout", e)
 
     if __name__ == "__main__":
         # Run the server with async-aware entrypoint
