@@ -5,6 +5,7 @@ import sys
 import datetime
 import logging
 import traceback
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +18,7 @@ def log_error(message):
 try:
     # Initialize FastMCP server
     log_error("Initializing FastMCP server...")
-    mcp = FastMCP("espn-fantasy-football", dependancies=['espn-api'])
+    mcp = FastMCP("espn-fantasy-football", dependancies=['espn-api', 'playwright'])
 
     # Constants
     CURRENT_YEAR = datetime.datetime.now().year
@@ -34,7 +35,7 @@ try:
         
         def get_league(self, session_id, league_id, year=CURRENT_YEAR):
             """Get a league instance with caching, using stored credentials if available"""
-            key = f"{league_id}_{year}"
+            key = f"{league_id}_{year}_{session_id}"
             
             # Check if we have credentials for this session
             espn_s2 = None
@@ -43,18 +44,15 @@ try:
                 espn_s2 = self.credentials[session_id].get('espn_s2')
                 swid = self.credentials[session_id].get('swid')
             
-            # Create league cache key including auth info
-            cache_key = f"{key}_{espn_s2}_{swid}"
-            
-            if cache_key not in self.leagues:
+            if key not in self.leagues:
                 log_error(f"Creating new league instance for {league_id}, year {year}")
                 try:
-                    self.leagues[cache_key] = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
+                    self.leagues[key] = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
                 except Exception as e:
                     log_error(f"Error creating league: {str(e)}")
                     raise
             
-            return self.leagues[cache_key]
+            return self.leagues[key]
         
         def store_credentials(self, session_id, espn_s2, swid):
             """Store credentials for a session"""
@@ -69,6 +67,7 @@ try:
             if session_id in self.credentials:
                 del self.credentials[session_id]
                 log_error(f"Cleared credentials for session {session_id}")
+                
 
     # Create our API instance
     api = ESPNFantasyFootballAPI()
@@ -76,24 +75,72 @@ try:
     # Store a session map
     SESSION_ID = "default_session"
 
+    # Open a browser and sign in to get cookie values
     @mcp.tool()
-    async def authenticate(espn_s2: str, swid: str) -> str:
-        """Store ESPN authentication credentials for this session.
-        
-        Args:
-            espn_s2: The ESPN_S2 cookie value from your ESPN account
-            swid: The SWID cookie value from your ESPN account
-        """
+    async def authenticate() -> str:
+        """Open a browser to ESPN and wait for login, then store cookies for this session."""
         try:
-            log_error("Authenticating...")
-            # Store credentials for this session
-            api.store_credentials(SESSION_ID, espn_s2, swid)
-            
-            return "Authentication successful. Your credentials are stored for this session only."
+            try:
+                from playwright.async_api import async_playwright
+            except Exception as import_err:
+                log_error(f"Playwright import failed: {str(import_err)}")
+                return ("Playwright is required for browser authentication. "
+                        "Install browsers with: python -m playwright install chromium")
+
+            async with async_playwright() as p:
+                try:
+                    browser = await p.chromium.launch(headless=False)
+                except Exception as launch_err:
+                    msg = ("Failed to launch Chromium. You may need to install Playwright browsers. "
+                           "Run: python -m playwright install chromium")
+                    log_error(f"{msg} | Details: {str(launch_err)}")
+                    return msg
+
+                context = await browser.new_context()
+                page = await context.new_page()
+                await page.goto("https://www.espn.com/fantasy/football/")
+
+                loop = asyncio.get_event_loop()
+                deadline = loop.time() + 180
+                found_espn_s2 = None
+                found_swid = None
+
+                log_error("Please log into ESPN in the opened browser window...")
+                while loop.time() < deadline:
+                    cookies = await context.cookies()
+                    for cookie in cookies:
+                        name = cookie.get("name")
+                        if name == "espn_s2" and not found_espn_s2:
+                            found_espn_s2 = cookie.get("value")
+                        if name == "SWID" and not found_swid:
+                            found_swid = cookie.get("value")
+                    if found_espn_s2 and found_swid:
+                        break
+                    await asyncio.sleep(0.5)
+
+                await browser.close()
+
+                if not (found_espn_s2 and found_swid):
+                    return ("Timed out waiting for login. Please log into ESPN in the opened browser window, "
+                            "then run authenticate again.")
+
+                api.store_credentials(SESSION_ID, found_espn_s2, found_swid)
+                return "Authentication successful via browser. Credentials stored for this session only."
         except Exception as e:
             log_error(f"Authentication error: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             return f"Authentication error: {str(e)}"
+
+    # Check the environment for stored credentials
+    @mcp.tool(name="Get Credentials (test)")
+    async def get_credentials() -> str:
+        """Return env var 'test' (empty string if unset)."""
+        try:
+            return os.environ.get("test") or ""
+        except Exception as e:
+            log_error(f"Error getting credentials: {str(e)}")
+            traceback.print_exc(file=sys.stderr)
+            return f"Error getting credentials: {str(e)}"
 
     @mcp.tool()
     async def get_league_info(league_id: int, year: int = CURRENT_YEAR) -> str:
@@ -123,8 +170,8 @@ try:
             log_error(f"Error retrieving league info: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please use the authenticate tool first with your "
-                      "ESPN_S2 and SWID cookies to access private leagues.")
+                return ("This appears to be a private league. Please run the authenticate tool to login via "
+                      "browser before accessing private leagues.")
             return f"Error retrieving league: {str(e)}"
 
     @mcp.tool()
@@ -170,8 +217,8 @@ try:
             log_error(f"Error retrieving team roster: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please use the authenticate tool first with your "
-                      "ESPN_S2 and SWID cookies to access private leagues.")
+                return ("This appears to be a private league. Please run the authenticate tool to login via "
+                      "browser before accessing private leagues.")
             return f"Error retrieving team roster: {str(e)}"
         
     @mcp.tool()
@@ -216,8 +263,8 @@ try:
             log_error(f"Error retrieving team results: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please use the authenticate tool first with your "
-                      "ESPN_S2 and SWID cookies to access private leagues.")
+                return ("This appears to be a private league. Please run the authenticate tool to login via "
+                      "browser before accessing private leagues.")
             return f"Error retrieving team results: {str(e)}"
 
     @mcp.tool()
@@ -263,8 +310,8 @@ try:
             log_error(f"Error retrieving player stats: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please use the authenticate tool first with your "
-                      "ESPN_S2 and SWID cookies to access private leagues.")
+                return ("This appears to be a private league. Please run the authenticate tool to login via "
+                      "browser before accessing private leagues.")
             return f"Error retrieving player stats: {str(e)}"
 
     @mcp.tool()
@@ -302,8 +349,8 @@ try:
             log_error(f"Error retrieving league standings: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please use the authenticate tool first with your "
-                      "ESPN_S2 and SWID cookies to access private leagues.")
+                return ("This appears to be a private league. Please run the authenticate tool to login via "
+                      "browser before accessing private leagues.")
             return f"Error retrieving league standings: {str(e)}"
 
     @mcp.tool()
