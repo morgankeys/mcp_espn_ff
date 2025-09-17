@@ -24,17 +24,28 @@ Design a small, modular server that supports both launch modes with explicit, sa
 - **Sources (precedence)**:
   - Process env (from connector UI or shell)
   - `.env` file (local dev/independent mode)
-  - In-memory session (set by tools like browser auth)
+
 - **Loading**:
   - Always load `.env` if present (via `python-dotenv`)
   - Read process env after `.env` so process env can override
+  - If both are present, warn the user that the process environment will override (and how to change this)
+  - If neither is present or values are empty/invalid, tools automatically trigger browser authentication; no manual check required
+
 - **Validation**:
-  - At startup, compute an “auth status” (both cookies present vs missing)
-  - Tools can query this status and receive clear guidance
+  - At startup, compute an internal “auth status” (both cookies present vs missing)
+  - Used by `ensure_authenticated(...)` to decide whether to trigger browser auth; not user-facing
 
 ### Persistence strategy (by mode)
+- Mode is implicitly determined at runtime based on where valid credentials are found:
+  - If valid `ESPN_S2` and `SWID` exist in the process environment → use Mode 1 (AI client).
+  - Else if valid values exist in `.env` → use Mode 2 (independent).
+  - Else → no credentials available; prompt the user to authenticate.
 - **Mode 1 – Launch from AI client**
   - Treat process env as read-only (cannot persist to connector-managed env from the server)
+  - If env vars are present but empty or invalid:
+    - Prompt the user to run browser authentication
+    - Set `os.environ` for the current process (works for this run)
+    - Return cookie values (masked unless `reveal=True`) so the user can update the connector’s env UI
   - On browser auth:
     - Set `os.environ` for current process (works for current run)
     - Return the cookie values (or masked with a “reveal” flag) so the user can update the connector’s env UI
@@ -43,49 +54,41 @@ Design a small, modular server that supports both launch modes with explicit, sa
   - On browser auth:
     - Write/overwrite `ESPN_S2` and `SWID` in `.env`
     - Refresh in-memory env and cache, so subsequent tools work immediately
+  - If neither source has credentials, warn the user that they will need to authenticate (e.g., via the browser auth tool)
 
 ### Mode detection
-- Preferred: explicit CLI flag `--mode client|independent`
-- Fallback auto-detect:
-  - If `.env` exists → default to `independent`
-  - Else if special marker env var (e.g., `MCP_LAUNCHED=1`) is present → `client`
-- Allow override via CLI/env if auto-detect is wrong
+- No explicit mode setting. Mode is inferred from credentials:
+  - If valid `ESPN_S2` and `SWID` exist in the process environment → Mode 1 (AI client)
+  - Else if valid values exist in `.env` → Mode 2 (independent)
+  - Else → no credentials; prompt the user to authenticate
+  - If process env vars exist but are empty/invalid → treat as Mode 1 with invalid creds; prompt browser auth and instruct updating the connector’s env
 
 ### Startup flow
-1) Parse CLI flags/env to determine mode.
-2) Load `.env` if present.
-3) Read `ESPN_S2`/`SWID` from env; set an `AuthState` object.
+1) Load `.env` if present.
+2) Infer credentials source implicitly:
+   - If valid `ESPN_S2`/`SWID` in process env → treat as AI client (Mode 1)
+   - Else if valid values in `.env` → treat as independent (Mode 2)
+   - Else → unauthenticated; prompt for browser auth
+3) Set an `AuthState` object based on the detected source.
 4) Initialize services:
    - `CredentialManager` (abstraction over env, `.env`, in-memory)
    - `LeagueService` (wraps `espn_api.football.League` with caching)
-5) Register tools; expose a “status” tool to show auth state and next steps.
+5) Register tools.
 
 ### Tools (API surface)
-- `auth_status()`:
-  - Returns whether credentials are available and where they were sourced from
-  - Provides next-step hints (set env in connector UI; run browser auth; create `.env`)
 - `authenticate_browser(headless: bool = False, persist: bool = True, reveal: bool = False)`:
   - Opens Playwright, waits for cookies
-  - In client mode:
-    - Sets `os.environ` for this process
-    - If `persist=True`, returns values (masked unless `reveal=True`) with copy/paste instructions for connector env UI
-  - In independent mode:
-    - Writes/updates `.env` (if `persist=True`)
-    - Reloads env for current run
-- `use_env_credentials()`:
-  - Loads `ESPN_S2`/`SWID` from current env into the session cache (idempotent)
-- `set_credentials(espn_s2: str, swid: str, persist: bool = False)`:
-  - Always sets in-memory session + process env
-  - If independent mode and `persist=True`, writes to `.env`
-- `logout(clear_env: bool = False)`:
-  - Clears in-memory/session credentials and cache
-  - If `clear_env=True` in independent mode, removes keys from `.env` and current process env
+- Central helper (internal): `ensure_authenticated(headless: bool = False, persist: bool = True)`
+  - Checks for valid credentials from process env/`.env`
+  - If missing or invalid, launches the browser auth flow (same logic as `authenticate_browser`)
+  - Persists according to `persist` and updates the current process env
 - Existing ESPN tools (`get_league_info`, `get_team_roster`, etc.):
   - Depend only on `LeagueService.get_league(...)` which uses `CredentialManager` for credentials and a cache keyed by `(league_id, year, session_id)`
+  - Each tool calls `ensure_authenticated(...)` up-front so the user never has to manually check auth
 
 ### Services and caching
 - `CredentialManager`
-  - `get()` returns best available credentials (session > process env > `.env`)
+  - `get()` returns best available credentials (process env > `.env`)
   - `set(espn_s2, swid, persist_mode)` applies to memory, process env, and optionally `.env`
   - `clear()` clears memory; optional `.env` pruning
 - `LeagueService`
@@ -94,35 +97,30 @@ Design a small, modular server that supports both launch modes with explicit, sa
   - Small TTL or invalidation on `set_credentials` to avoid stale auth
 
 ### File layout
-- `server.py` (entrypoint, CLI, tool registry)
-- `config.py` (mode detection, dotenv loading, constants)
-- `auth.py` (`CredentialManager`, `.env` writer, masking helpers)
-- `services/espn.py` (`LeagueService`, ESPN API interactions)
-- `tools/`:
-  - `auth_tools.py` (`authenticate_browser`, `auth_status`, `set_credentials`, `logout`, `use_env_credentials`)
-  - `league_tools.py` (league/team/player queries)
+- `server.py` (entrypoint, tool registry)
+- `auth.py` (dotenv loading, `CredentialManager`, masking helpers, `ensure_authenticated`, browser auth)
+- `espn_service.py` (`LeagueService`, ESPN API interactions)
+- `tools.py` (all tool endpoints; each calls `ensure_authenticated` internally)
 - `.env` (ignored by VCS; sample `.env.example` in repo)
 - Add `python-dotenv` to `pyproject.toml`
 
 ### Error handling and UX
-- Consistent, friendly messages with actionable next steps per mode
+- Consistent, friendly messages with actionable next steps
 - Mask secrets by default; `reveal=True` only when user requests
-- Detect private-league/401 errors and recommend auth flows
+- Detect private-league/401 errors and auto-trigger `ensure_authenticated(...)` once; if it still fails, surface guidance
 - Logs to stderr; never log secret values
 
 ### Security
 - Mask outputs unless explicitly requested
-- Don’t write `.env` unless in independent mode or a user passes `persist=True`
-- Provide a config flag to disable any persistence entirely
+
 
 ### Implementation steps
 - Add `python-dotenv` and the new modules
-- Implement `CredentialManager` and `.env` writer/reader
-- Implement `LeagueService` with cache and 401-refresh behavior
-- Refactor tools to call through these services
-- Add CLI (`--mode`, `--headless`, `--no-persist`)
-- Add `auth_status` first to validate the config paths
-- Write `.env.example` and README snippets for both modes
+- Implement `CredentialManager` and `.env` writer/reader in `auth.py`
+- Implement `authenticate_browser(headless=False, persist=True, reveal=False)` and internal `ensure_authenticated(headless=False, persist=True)`
+- Implement `LeagueService` with cache and 401-refresh behavior in `espn_service.py`
+- Implement tool endpoints in `tools.py` that call `ensure_authenticated` and delegate to `LeagueService`
+- Write `.env.example` and README snippets explaining implicit credential sourcing and the browser auth flow
 
 
 # To do list
@@ -131,38 +129,25 @@ Design a small, modular server that supports both launch modes with explicit, sa
 1) Dependencies and scaffolding
 - [ ] Add `python-dotenv`: `uv add python-dotenv`
 - [ ] Create `.env.example` with `ESPN_S2` and `SWID`; ensure `.env` is git-ignored
-- [ ] Create files/dirs: `server.py`, `config.py`, `auth.py`, `services/espn.py`, `tools/auth_tools.py`, `tools/league_tools.py`
+- [ ] Create files: `server.py`, `auth.py`, `espn_service.py`, `tools.py`
 
-2) Mode detection and config
-- [ ] Implement `config.py` with `detect_mode(...)`, `load_dotenv_if_present()`, and a settings dataclass
-- [ ] Add CLI flags in entrypoint: `--mode`, `--headless`, `--no-persist`; print selected mode on startup
+2) Auth
+- [ ] Implement `CredentialManager` and `.env` read/write helper functions in `auth.py`
+- [ ] Implement `authenticate_browser(headless=False, persist=True, reveal=False)`
+- [ ] Implement internal `ensure_authenticated(headless=False, persist=True)`
 
-3) CredentialManager
-- [ ] Implement `get()`, `set(espn_s2, swid, persist=False)`, `clear()`, `source()` and masking helpers
-- [ ] Implement `.env` write/update/remove for independent mode
-- [ ] Basic unit tests for get/set/clear precedence
-
-4) LeagueService
+3) LeagueService
 - [ ] Implement `get_league(session_id, league_id, year)` with cache key `(session_id, league_id, year)`
 - [ ] Resolve credentials via `CredentialManager`; create/cached `League`
 - [ ] Invalidate/refresh on credential change or 401 errors
 
-5) Auth tools
-- [ ] `auth_status()`
-- [ ] `authenticate_browser(headless=False, persist=True, reveal=False)` (returns cookies for copy/paste in client mode; writes `.env` in independent mode when `persist=True`)
-- [ ] `use_env_credentials()`
-- [ ] `set_credentials(espn_s2, swid, persist=False)`
-- [ ] `logout(clear_env=False)`
+4) Tools
+- [ ] Implement `get_league_info`, `get_team_roster`, `get_team_info`, `get_player_stats`, `get_league_standings`, `get_matchup_info` in `tools.py` calling `ensure_authenticated` and using `LeagueService`
 
-6) ESPN tools refactor
-- [ ] Update: `get_league_info`, `get_team_roster`, `get_team_info`, `get_player_stats`, `get_league_standings`, `get_matchup_info` to use `LeagueService`
-- [ ] Normalize error handling (401/private league guidance)
-- [ ] Fix any existing cache key bugs during refactor
-
-7) Docs and examples
-- [ ] Update `README.md` with instructions for client mode and independent mode
+5) Docs and examples
+- [ ] Update `README.md` with instructions for implicit credential sourcing and browser auth
 - [ ] Add example commands and connector UI guidance; include security notes about secrets
 
-8) QA
-- [ ] Manual test matrix: client mode with env, independent mode with `.env`, browser auth with `persist=True/False`
+6) QA
+- [ ] Manual test matrix: process env present, `.env` present, and unauthenticated → browser auth triggers
 - [ ] Verify secrets are masked in outputs and never logged
