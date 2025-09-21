@@ -43,6 +43,13 @@ try:
             if session_id in self.credentials:
                 espn_s2 = self.credentials[session_id].get('espn_s2')
                 swid = self.credentials[session_id].get('swid')
+            # Fall back to process environment variables if no session credentials
+            if not espn_s2 and not swid:
+                env_espn_s2 = os.environ.get("ESPN_S2")
+                env_swid = os.environ.get("SWID")
+                if env_espn_s2 and env_swid:
+                    espn_s2 = env_espn_s2
+                    swid = env_swid
             
             if key not in self.leagues:
                 log_error(f"Creating new league instance for {league_id}, year {year}")
@@ -125,7 +132,19 @@ try:
                             "then run authenticate again.")
 
                 api.store_credentials(SESSION_ID, found_espn_s2, found_swid)
-                return "Authentication successful via browser. Credentials stored for this session only."
+                # Also set process environment for immediate use this run
+                try:
+                    os.environ["ESPN_S2"] = found_espn_s2
+                    os.environ["SWID"] = found_swid
+                except Exception:
+                    pass
+                # Return credentials so user can persist them in connector UI or .env
+                return (
+                    "Authentication successful.\n"
+                    f"ESPN_S2={found_espn_s2}\n"
+                    f"SWID={found_swid}\n"
+                    "These values are applied to this session. Copy them into your connector's env or a local .env."
+                )
         except Exception as e:
             log_error(f"Authentication error: {str(e)}")
             traceback.print_exc(file=sys.stderr)
@@ -170,8 +189,10 @@ try:
             log_error(f"Error retrieving league info: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please run the authenticate tool to login via "
-                      "browser before accessing private leagues.")
+                return (
+                    "This appears to be a private league. Run the authenticate tool to login via browser.\n"
+                    "After login, credentials (ESPN_S2 and SWID) will be displayed so you can update your connector env or .env."
+                )
             return f"Error retrieving league: {str(e)}"
 
     @mcp.tool()
@@ -217,8 +238,10 @@ try:
             log_error(f"Error retrieving team roster: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please run the authenticate tool to login via "
-                      "browser before accessing private leagues.")
+                return (
+                    "This appears to be a private league. Run the authenticate tool to login via browser.\n"
+                    "After login, credentials (ESPN_S2 and SWID) will be displayed so you can update your connector env or .env."
+                )
             return f"Error retrieving team roster: {str(e)}"
         
     @mcp.tool()
@@ -263,8 +286,10 @@ try:
             log_error(f"Error retrieving team results: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please run the authenticate tool to login via "
-                      "browser before accessing private leagues.")
+                return (
+                    "This appears to be a private league. Run the authenticate tool to login via browser.\n"
+                    "After login, credentials (ESPN_S2 and SWID) will be displayed so you can update your connector env or .env."
+                )
             return f"Error retrieving team results: {str(e)}"
 
     @mcp.tool()
@@ -310,8 +335,10 @@ try:
             log_error(f"Error retrieving player stats: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please run the authenticate tool to login via "
-                      "browser before accessing private leagues.")
+                return (
+                    "This appears to be a private league. Run the authenticate tool to login via browser.\n"
+                    "After login, credentials (ESPN_S2 and SWID) will be displayed so you can update your connector env or .env."
+                )
             return f"Error retrieving player stats: {str(e)}"
 
     @mcp.tool()
@@ -349,8 +376,10 @@ try:
             log_error(f"Error retrieving league standings: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please run the authenticate tool to login via "
-                      "browser before accessing private leagues.")
+                return (
+                    "This appears to be a private league. Run the authenticate tool to login via browser.\n"
+                    "After login, credentials (ESPN_S2 and SWID) will be displayed so you can update your connector env or .env."
+                )
             return f"Error retrieving league standings: {str(e)}"
 
     @mcp.tool()
@@ -390,8 +419,10 @@ try:
             log_error(f"Error retrieving matchup information: {str(e)}")
             traceback.print_exc(file=sys.stderr)
             if "401" in str(e) or "Private" in str(e):
-                return ("This appears to be a private league. Please use the authenticate tool first with your "
-                      "ESPN_S2 and SWID cookies to access private leagues.")
+                return (
+                    "This appears to be a private league. Run the authenticate tool to login via browser.\n"
+                    "After login, credentials (ESPN_S2 and SWID) will be displayed so you can update your connector env or .env."
+                )
             return f"Error retrieving matchup information: {str(e)}"
 
     @mcp.tool()
