@@ -138,3 +138,33 @@ Design a small, modular server that supports both launch contexts with explicit,
 - Implement `LeagueService` with cache and 401-refresh behavior in `espn_service.py`
 - Implement tool endpoints in `tools.py` that call `ensure_authenticated` and delegate to `LeagueService`
 - Write `.env.example` and README snippets explaining implicit credential sourcing and the browser auth flow
+
+## TODOs to align implementation with architecture
+
+- [ ] Add `python-dotenv` to `pyproject.toml` and load `.env` on startup
+- [ ] Split monolith into modules per plan: `server.py`, `auth.py`, `espn_service.py`, `tools.py`
+- [ ] Implement `CredentialManager` in `auth.py` with:
+  - [ ] `get()` best-available creds (process env > `.env`)
+  - [ ] `set(espn_s2, swid, persist_mode)` with optional `.env` persistence
+  - [ ] Source detection and precedence warning messaging
+  - [ ] `AuthState` (source, is_valid, last_checked, masked)
+  - [ ] Masking helpers for safe diagnostics
+- [ ] Implement browser auth in `auth.py`:
+  - [ ] `authenticate_browser(headless=False, timeout_seconds=180, reveal=False)`
+  - [ ] Single-flight lock to prevent concurrent auth sessions
+  - [ ] Guaranteed cleanup of context/browser and clear error messages
+  - [ ] Set process env for this run and return cookies for persistence
+- [ ] Implement `ensure_authenticated(headless=False, persist=True)` used by all tools
+- [ ] Implement `LeagueService` in `espn_service.py`:
+  - [ ] Cache league by `(league_id, year)` and current creds
+  - [ ] Invalidate/refresh on credential change or 401
+  - [ ] 401 retry policy: re-auth once, refresh, retry once, then guide user
+- [ ] Move tool endpoints to `tools.py`:
+  - [ ] Each tool calls `ensure_authenticated` then delegates to `LeagueService`
+  - [ ] Return masked outputs and actionable guidance
+- [ ] Create `server.py` entrypoint to register tools with FastMCP
+- [ ] Replace or refactor `espn_fantasy_server.py` to use the new modules; remove test-only `get_credentials`
+- [ ] Add `.env.example` and update `README.md` with credential sourcing and browser auth flow
+- [ ] Ensure logging to stderr avoids leaking secrets; mask by default
+- [ ] Add optional parameters to `authenticate` (headless/persist/reveal)
+- [ ] Validate credentials on first use (non-empty and/or probe) and record status
