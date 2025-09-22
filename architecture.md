@@ -141,8 +141,9 @@ Design a small, modular server that supports both launch contexts with explicit,
 
 ## TODOs to align implementation with architecture
 
-- [ ] Add `python-dotenv` to `pyproject.toml` and load `.env` on startup
-- [ ] Split monolith into modules per plan: `server.py`, `auth.py`, `espn_service.py`, `tools.py`
+- [x] Add `python-dotenv` to `pyproject.toml` and load `.env` on startup
+- [x] Split monolith into modules per plan: `server.py`, `auth.py`, `espn_service.py`, `tools.py`
+- [x] Remove legacy `espn_fantasy_server.py` and standardize on `server.py`
 - [ ] Implement `CredentialManager` in `auth.py` with:
   - [ ] `get()` best-available creds (process env > `.env`)
   - [ ] `set(espn_s2, swid, persist_mode)` with optional `.env` persistence

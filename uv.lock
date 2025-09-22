@@ -235,6 +235,7 @@ dependencies = [
     { name = "espn-api" },
     { name = "mcp", extra = ["cli"] },
     { name = "playwright" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
@@ -242,6 +243,7 @@ requires-dist = [
     { name = "espn-api", specifier = ">=0.44.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.5.0" },
     { name = "playwright", specifier = ">=1.45.0" },
+    { name = "python-dotenv", specifier = ">=1.0.1" },
 ]
 
 [[package]]
