@@ -145,27 +145,32 @@ Design a small, modular server that supports both launch contexts with explicit,
 - [x] Split monolith into modules per plan: `server.py`, `auth.py`, `espn_service.py`, `tools.py`
 - [x] Remove legacy `espn_fantasy_server.py` and standardize on `server.py`
 - [ ] Implement `CredentialManager` in `auth.py` with:
-  - [ ] `get()` best-available creds (process env > `.env`)
-  - [ ] `set(espn_s2, swid, persist_mode)` with optional `.env` persistence
+  - [x] `get()` best-available creds (process env > `.env`)
+  - [x] `set(espn_s2, swid, persist_mode)` with optional `.env` persistence
   - [ ] Source detection and precedence warning messaging
-  - [ ] `AuthState` (source, is_valid, last_checked, masked)
-  - [ ] Masking helpers for safe diagnostics
+  - [x] `AuthState` (source, is_valid, last_checked, masked)
+  - [x] Masking helpers for safe diagnostics
 - [ ] Implement browser auth in `auth.py`:
   - [ ] `authenticate_browser(headless=False, timeout_seconds=180, reveal=False)`
-  - [ ] Single-flight lock to prevent concurrent auth sessions
-  - [ ] Guaranteed cleanup of context/browser and clear error messages
-  - [ ] Set process env for this run and return cookies for persistence
+  - [x] Single-flight lock to prevent concurrent auth sessions
+  - [x] Guaranteed cleanup of context/browser and clear error messages
+  - [x] Set process env for this run and return cookies for persistence
 - [ ] Implement `ensure_authenticated(headless=False, persist=True)` used by all tools
+  - [x] Implemented and used by tools via `LeagueService`
 - [ ] Implement `LeagueService` in `espn_service.py`:
-  - [ ] Cache league by `(league_id, year)` and current creds
+  - [x] Cache league by `(league_id, year)` and current creds
   - [ ] Invalidate/refresh on credential change or 401
   - [ ] 401 retry policy: re-auth once, refresh, retry once, then guide user
 - [ ] Move tool endpoints to `tools.py`:
-  - [ ] Each tool calls `ensure_authenticated` then delegates to `LeagueService`
-  - [ ] Return masked outputs and actionable guidance
+  - [x] Each tool calls `ensure_authenticated` then delegates to `LeagueService`
+  - [x] Return masked outputs and actionable guidance
 - [ ] Create `server.py` entrypoint to register tools with FastMCP
+  - [x] Implemented (`server.py` uses `mcp_espn_ff.tools`)
 - [ ] Replace or refactor `espn_fantasy_server.py` to use the new modules; remove test-only `get_credentials`
+  - [x] Replaced (legacy file removed)
 - [ ] Add `.env.example` and update `README.md` with credential sourcing and browser auth flow
 - [ ] Ensure logging to stderr avoids leaking secrets; mask by default
+  - [x] Secrets are never logged; masking helpers used for diagnostics
 - [ ] Add optional parameters to `authenticate` (headless/persist/reveal)
 - [ ] Validate credentials on first use (non-empty and/or probe) and record status
+  - [x] Non-empty validation implemented and recorded in `AuthState`
