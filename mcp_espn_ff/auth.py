@@ -48,7 +48,7 @@ class CredentialManager:
     """Manages ESPN credentials from process env and optional .env persistence."""
 
     def __init__(self) -> None:
-        self._memory: dict[str, Optional[str]] = {"ESPN_S2": None, "SWID": None}
+        self._memory: dict[str, Optional[str]] = {"espn_s2": None, "SWID": None}
 
     def get(self) -> Tuple[Optional[str], Optional[str], AuthState]:
         # Read from process environment with support for common aliases
@@ -117,7 +117,7 @@ class CredentialManager:
                 new_lines.append(f"{key}={value}")
             return new_lines
 
-        lines = upsert(lines, "ESPN_S2", espn_s2)
+        lines = upsert(lines, "espn_s2", espn_s2)
         lines = upsert(lines, "SWID", swid)
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
