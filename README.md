@@ -47,22 +47,22 @@ This project is forked from [KBThree13/mcp_espn_ff](https://github.com/KBThree13
 - Include reference to the MCP server
   ```json
   {
-  "mcpServers": {
-    "espn-fantasy-football": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/absolute/path/to/directory",
-        "run",
-        "espn_fantasy_server.py"
-        ]
-      }
-    } 
+    "args" : [
+      "--directory",
+      "/Users/morgankeys/gits/mcp_espn_ff",
+      "run",
+      "server.py"
+    ],
+    "command" : "uv",
+    "env" : {
+      "SWID" : "<value>",
+      "espn_s2" : "<value>"
+    }
   }
+  ```
 2. Restart Claude Desktop
 
 
 ## Acknowledgements
-[KBThree13/mcp_espn_ff](https://github.com/KBThree13/mcp_espn_ff) - The repo this project is forked from
-[cwendt94/espn-api](https://github.com/cwendt94/espn-api) - Nifty python wrapper around the ESPN Fantasy API
-
+- [KBThree13/mcp_espn_ff](https://github.com/KBThree13/mcp_espn_ff) - The repo this project is forked from
+- [cwendt94/espn-api](https://github.com/cwendt94/espn-api) - Nifty python wrapper around the ESPN Fantasy API
