@@ -141,9 +141,6 @@ Design a small, modular server that supports both launch contexts with explicit,
 
 ## TODOs to align implementation with architecture
 
-- [x] Add `python-dotenv` to `pyproject.toml` and load `.env` on startup
-- [x] Split monolith into modules per plan: `server.py`, `auth.py`, `espn_service.py`, `tools.py`
-- [x] Remove legacy `espn_fantasy_server.py` and standardize on `server.py`
 - [ ] Implement `CredentialManager` in `auth.py` with:
   - [x] `get()` best-available creds (process env > `.env`)
   - [x] `set(espn_s2, swid, persist_mode)` with optional `.env` persistence
@@ -161,16 +158,6 @@ Design a small, modular server that supports both launch contexts with explicit,
   - [x] Cache league by `(league_id, year)` and current creds
   - [ ] Invalidate/refresh on credential change or 401
   - [ ] 401 retry policy: re-auth once, refresh, retry once, then guide user
-- [ ] Move tool endpoints to `tools.py`:
-  - [x] Each tool calls `ensure_authenticated` then delegates to `LeagueService`
-  - [x] Return masked outputs and actionable guidance
-- [ ] Create `server.py` entrypoint to register tools with FastMCP
-  - [x] Implemented (`server.py` uses `mcp_espn_ff.tools`)
-- [ ] Replace or refactor `espn_fantasy_server.py` to use the new modules; remove test-only `get_credentials`
-  - [x] Replaced (legacy file removed)
 - [ ] Add `.env.example` and update `README.md` with credential sourcing and browser auth flow
-- [ ] Ensure logging to stderr avoids leaking secrets; mask by default
-  - [x] Secrets are never logged; masking helpers used for diagnostics
 - [ ] Add optional parameters to `authenticate` (headless/persist/reveal)
-- [ ] Validate credentials on first use (non-empty and/or probe) and record status
-  - [x] Non-empty validation implemented and recorded in `AuthState`
+
