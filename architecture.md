@@ -5,11 +5,11 @@ The following are guidelines for how the server should work.
 Design a small, modular server that seamlessly handles authentication. 
 
 ## Authentication
-There should also be a tool that will open a browser and allow the user to sign in. Once the user has signed in, the server should automatically grab the correct cookie credentials and save them to a database.
+There should also be a method that will open a browser and allow the user to sign in. Once the user has signed in, the server should automatically grab the correct cookie credentials and save them to a database.
 - **ESPN Credential names**: `espn_s2`, `SWID`
 
 ### Credential database
-The serve should use a simple SQLite database to securely store credentials and secrets. In this way the server should be able to store credentials for multiple accounts.
+The server should use a simple SQLite database to securely store credentials and secrets. In this way, the server should be able to store credentials for multiple accounts.
 
 Example db row:
 - uuid
@@ -19,6 +19,12 @@ Example db row:
 - SWID
 
 The service should also allow users to sign in to their espn fantasy football account via playwrite browser and then retrieve the appropriate credentials.
+
+### When to authenticate
+Authentication should be handled as needed; there does not need to be a tool for authentication. However, each tool must check
+
+
+
 
 ### Playwright lifecycle
 - Single-flight: Only one browser authentication can run at a time. Concurrent requests receive “Authentication is already in progress. Please wait for the current login to complete.”
@@ -37,11 +43,7 @@ The service should also allow users to sign in to their espn fantasy football ac
 - Mask outputs unless explicitly requested
 
 ## Tools (API surface)
-- `authenticate_browser()`:
-  - Opens Playwright, waits for cookies
-- Central helper (internal): `ensure_authenticated()`
-  - Checks for valid credentials from process env/`.env`
-  - If missing or invalid, launches the browser auth flow (same logic as `authenticate_browser`)
+- Get leauges
 - Existing ESPN tools (`get_league_info`, `get_team_roster`, etc.):
   - Depend only on `LeagueService.get_league(...)` which uses `CredentialManager` for credentials and a cache keyed by `(league_id, year)`
   - Each tool calls `ensure_authenticated(...)` up-front so the user never has to manually check auth
@@ -54,6 +56,11 @@ The service should also allow users to sign in to their espn fantasy football ac
   - `get_league(league_id, year)` builds a strong cache key
   - Creates league with current creds; refreshes object if creds change or on 401
   - Small TTL or invalidation on `set_credentials` to avoid stale auth
+- `authenticate_browser()`:
+  - Opens Playwright, waits for cookies
+- Central helper (internal): `ensure_authenticated()`
+  - Checks for valid credentials from process env/`.env`
+  - If missing or invalid, launches the browser auth flow (same logic as `authenticate_browser`)
 
 ## File layout
 - `server.py` (entrypoint, tool registry)
