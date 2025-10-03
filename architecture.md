@@ -9,22 +9,33 @@ There should also be a method that will open a browser and allow the user to sig
 - **ESPN Credential names**: `espn_s2`, `SWID`
 
 ### Credential database
-The server should use a simple SQLite database to securely store credentials and secrets. In this way, the server should be able to store credentials for multiple accounts.
+The server should use a simple SQLite database to securely store credentials and secrets. In this way, the server should be able to store credentials for multiple leagues or accounts.
 
-Example db row:
-- uuid
-- league id
-- team id
+Credentials table:
+- SWID (primary key)
 - espn_s2
-- SWID
 
+Leagues table:
+- league_id (primary key)
+- team_id
+- team_name
+- SWID (foreign key -> credentials table)
+
+### Authentication
 The service should also allow users to sign in to their espn fantasy football account via playwrite browser and then retrieve the appropriate credentials.
 
-### When to authenticate
-Authentication should be handled as needed; there does not need to be a tool for authentication. However, each tool must check
+The folowing is an outline of how authentication should work:
 
-
-
+- Open playwrite browser to https://www.espn.com/fantasy/football/, poll for cookie with credentials
+- Save SWID, espn_s2. Create row in credentials table with these values.
+- Make sure the browser is still on https://www.espn.com/fantasy/football/
+- Find element id="fantasy-feed-items"
+- Within that element, find every <a> tag with class favItem__team. For each <a>:
+  - find the href
+  - parse out leagueId=<int>, save as league_id 
+  - parse out teamId=2, save as team_id
+  - Find div class=”favItem__name” and save the string as team_name
+  - Save league_id, team_id, team_name, SWID to leagues table
 
 ### Playwright lifecycle
 - Single-flight: Only one browser authentication can run at a time. Concurrent requests receive “Authentication is already in progress. Please wait for the current login to complete.”
