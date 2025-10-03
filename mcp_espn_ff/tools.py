@@ -1,8 +1,7 @@
 import sys
 import datetime
 from mcp.server.fastmcp import FastMCP
-from .auth import ensure_authenticated
-from .espn_service import LeagueService
+from .espn_service import LeagueService, ensure_authenticated
 
 
 def log_error(message: str) -> None:
@@ -17,7 +16,7 @@ if datetime.datetime.now().month < 7:
 def create_tools(mcp: FastMCP) -> None:
     league_service = LeagueService()
 
-    @mcp.tool(name="authenticate")
+    @mcp.tool(name="authenticate", description="Only needed if credentials are not present or not valid in process environment.")
     async def authenticate() -> str:
         try:
             espn_s2, swid, state = await ensure_authenticated()
