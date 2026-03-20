@@ -1,12 +1,14 @@
 [project]
-name = "mcp-espn-ff"
-version = "0.1.0"
-description = "Add your description here"
+name = "espn-ff"
+version = "0.2.0"
+description = "ESPN Fantasy Football CLI and Claude Code skills"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "espn-api>=0.44.1",
-    "mcp[cli]>=1.5.0",
     "playwright>=1.45.0",
     "python-dotenv>=1.0.1",
 ]
+
+[project.scripts]
+espn-ff = "mcp_espn_ff.cli:main"
