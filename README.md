@@ -1,68 +1,70 @@
-# ESPN Fantasy Football MCP Server
+# ESPN Fantasy Football — Claude Code Skills
 
-## Overview
+Query and analyze your ESPN Fantasy Football league directly from Claude Code using slash commands.
 
-This MCP (Model Context Protocol) server allows LLMs to interact with the ESPN Fantasy Football API. It provides tools for accessing league data, team rosters, player statistics, and more through a standardized interface. It can work with both public and private ESPN Leagues.
+This project is forked from [KBThree13/mcp_espn_ff](https://github.com/KBThree13/mcp_espn_ff).
 
-This project is forked from [KBThree13/mcp_espn_ff](https://github.com/KBThree13/mcp_espn_ff). It expands on that project by adding compatibilty with other LLM clients, such as Perplexity, and adds an authentication tool so that users can easily find their authentication tokens from ESPN.
+## Features
 
-## Features (MCP Tools)
+| Skill | Command | What it does |
+|-------|---------|--------------|
+| Authentication | `/espn-auth` | Opens a browser to log in to ESPN and saves credentials to `.env` |
+| League overview | `/espn-league` | League info, standings, weekly matchups |
+| Roster & players | `/espn-roster` | Team rosters, individual player stats, team season info |
+| Analysis | `/espn-analyze` | Trade advice, waiver picks, playoff projections, head-to-head comparisons |
 
-- **Authentication**: Open a browser for user to sign-in so that they can automatically find authentication tokens. Tokens can be stored in the LLM client or in a .env file.
-- **League Info**: Get basic information about fantasy football leagues
-- **Team Rosters**: View current team rosters and player details
-- **Player Stats**: Find and display stats for specific players
-- **League Standings**: View current team rankings and performance metrics
-- **Matchup Information**: Get details about weekly matchups
+## Prerequisites
+
+- Python 3.12+
+- [`uv`](https://docs.astral.sh/uv/) package manager
+- Claude Code
 
 ## Installation
 
-### Prerequisites
+```bash
+git clone https://github.com/morgankeys/mcp_espn_ff
+cd mcp_espn_ff
+uv sync
+python -m playwright install chromium
+```
 
-- Python 3.10 or higher
-- `uv` package manager
-  - espn-api >= 0.44.1
-  - mcp[cli] >=1.5.0
-  - playwright >=1.45.0
-  - python-dotenv >=1.0.1
+## Authentication
 
+ESPN credentials (`ESPN_S2` and `SWID`) are required for private leagues.
 
-## Usage with LLM Clients
+**Option A — browser login (recommended):**
+Run `/espn-auth` in Claude Code. A Chromium window will open; log in and credentials
+are saved to `.env` automatically.
 
-### Perplexity
+**Option B — manual:**
+Create a `.env` file in the project root:
+```
+ESPN_S2=<your value>
+SWID=<your value>
+```
+You can find these values in your browser cookies after logging in to ESPN.
 
-1. Add MCP_ESPN_FF as a [connector in Perplexity](https://www.perplexity.ai/search/how-do-i-add-a-connector-the-p-O2JTAQUFRiKI68X_4N43ww).
+Public leagues work without any credentials.
 
-2. Add the following environment variables as part of the connector (case sensitive):
-  - "espn_s2"
-  - "SWID"
+## CLI reference
 
-  If you already know these tokens, you can add them or ask the connector to authencticate and print the tokens. (Recommend you delete the chat later).
+The skills use an underlying CLI that you can also call directly:
 
+```bash
+uv run python -m mcp_espn_ff.cli league-info --league-id <ID>
+uv run python -m mcp_espn_ff.cli standings   --league-id <ID> [--year <YEAR>]
+uv run python -m mcp_espn_ff.cli matchups    --league-id <ID> [--week <WEEK>]
+uv run python -m mcp_espn_ff.cli roster      --league-id <ID> --team-id <N>
+uv run python -m mcp_espn_ff.cli team-info   --league-id <ID> --team-id <N>
+uv run python -m mcp_espn_ff.cli player      --league-id <ID> --name "<NAME>"
+uv run python -m mcp_espn_ff.cli authenticate
+```
 
-### Claude Desktop
+All commands output JSON. Add `--help` to any subcommand for details.
 
-1. Update the Claude Desktop config:
-- MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Include reference to the MCP server
-  ```json
-  {
-    "args" : [
-      "--directory",
-      "/Users/morgankeys/gits/mcp_espn_ff",
-      "run",
-      "server.py"
-    ],
-    "command" : "uv",
-    "env" : {
-      "SWID" : "<value>",
-      "espn_s2" : "<value>"
-    }
-  }
-  ```
-2. Restart Claude Desktop
-
+Your **League ID** is in the ESPN URL: `fantasy.espn.com/football/league?leagueId=XXXXX`
 
 ## Acknowledgements
-- [KBThree13/mcp_espn_ff](https://github.com/KBThree13/mcp_espn_ff) - The repo this project is forked from
-- [cwendt94/espn-api](https://github.com/cwendt94/espn-api) - Nifty python wrapper around the ESPN Fantasy API
+
+- [KBThree13/mcp_espn_ff](https://github.com/KBThree13/mcp_espn_ff) — original MCP server this project is forked from
+- [cwendt94/espn-api](https://github.com/cwendt94/espn-api) — Python wrapper for the ESPN Fantasy API
